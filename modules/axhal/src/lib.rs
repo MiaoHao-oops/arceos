@@ -40,6 +40,7 @@ mod platform;
 pub mod arch;
 pub mod cpu;
 pub mod mem;
+pub mod random;
 pub mod time;
 pub mod trap;
 

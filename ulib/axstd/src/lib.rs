@@ -50,6 +50,9 @@
 #![feature(doc_cfg)]
 #![feature(doc_auto_cfg)]
 #![feature(ip_in_core)]
+#![feature(hashmap_internals)]
+#![feature(hasher_prefixfree_extras)]
+#![feature(const_hash)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -71,6 +74,9 @@ pub mod process;
 pub mod sync;
 pub mod thread;
 pub mod time;
+
+// #[cfg(feature = "alloc")]
+pub mod hash_map;
 
 #[cfg(feature = "fs")]
 pub mod fs;

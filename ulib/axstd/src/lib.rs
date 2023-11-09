@@ -75,7 +75,7 @@ pub mod sync;
 pub mod thread;
 pub mod time;
 
-// #[cfg(feature = "alloc")]
+#[cfg(feature = "alloc")]
 pub mod hash_map;
 
 #[cfg(feature = "fs")]

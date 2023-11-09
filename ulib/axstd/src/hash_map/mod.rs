@@ -175,11 +175,11 @@ impl RandomState {
         //
         //
         //
-        
+        let random = random::ax_random();
         // TODO: add random support, how to support thread safety?
         RandomState {
-            k0: random::ax_random() as u64,
-            k1: random::ax_random() as u64
+            k0: (random & 0xffff_ffff) as u64,
+            k1: ((random >> 32) & 0xffff_ffff) as u64
         }
     }
 }

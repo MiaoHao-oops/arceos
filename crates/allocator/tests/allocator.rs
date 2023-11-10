@@ -5,7 +5,7 @@ use std::alloc::{Allocator, Layout};
 use std::collections::BTreeMap;
 use std::io::Write;
 
-use allocator::{AllocatorRc, BuddyByteAllocator, SlabByteAllocator, TlsfByteAllocator};
+use allocator::{AllocatorRc, BuddyByteAllocator, SlabByteAllocator, TlsfByteAllocator, EarlyAllocator};
 use rand::{prelude::SliceRandom, Rng};
 
 const POOL_SIZE: usize = 1024 * 1024 * 128;
@@ -98,6 +98,18 @@ fn run_test(f: impl FnOnce(&mut [u8])) {
 fn system_alloc() {
     run_test(|_pool| {
         let alloc = std::alloc::System;
+        test_alignment(50, &alloc);
+        test_vec(3_000_000, &alloc);
+        test_vec2(30_000, 64, &alloc);
+        test_vec2(7_500, 520, &alloc);
+        test_btree_map(50_000, &alloc);
+    })
+}
+
+#[test]
+fn early_alloc() {
+    run_test(|pool| {
+        let alloc = AllocatorRc::new(EarlyAllocator::<4096>::new(), pool);
         test_alignment(50, &alloc);
         test_vec(3_000_000, &alloc);
         test_vec2(30_000, 64, &alloc);

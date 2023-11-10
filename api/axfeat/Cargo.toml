@@ -23,6 +23,7 @@ irq = ["axhal/irq", "axruntime/irq", "axtask?/irq"]
 
 # Memory
 alloc = ["axalloc", "axruntime/alloc"]
+alloc-early = ["axalloc/early"]
 alloc-tlsf = ["axalloc/tlsf"]
 alloc-slab = ["axalloc/slab"]
 alloc-buddy = ["axalloc/buddy"]

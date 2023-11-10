@@ -1,6 +1,7 @@
 cfg_alloc! {
     use core::alloc::Layout;
     use core::ptr::NonNull;
+    use axalloc::GlobalAllocator;
 
     pub fn ax_alloc(layout: Layout) -> Option<NonNull<u8>> {
         axalloc::global_allocator().alloc(layout).ok()

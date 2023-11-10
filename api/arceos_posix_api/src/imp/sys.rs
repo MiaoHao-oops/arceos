@@ -1,4 +1,5 @@
 use core::ffi::{c_int, c_long};
+use ax_alloc::GlobalAllocator;
 
 use crate::ctypes;
 

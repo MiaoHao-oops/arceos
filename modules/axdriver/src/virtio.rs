@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use axalloc::global_allocator;
+use axalloc::{global_allocator, GlobalAllocator};
 use axhal::mem::{phys_to_virt, virt_to_phys};
 use cfg_if::cfg_if;
 use driver_common::{BaseDriverOps, DevResult, DeviceType};

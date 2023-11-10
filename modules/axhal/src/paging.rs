@@ -1,6 +1,6 @@
 //! Page table manipulation.
 
-use axalloc::global_allocator;
+use axalloc::{global_allocator, GlobalAllocator};
 use page_table::PagingIf;
 
 use crate::mem::{phys_to_virt, virt_to_phys, MemRegionFlags, PhysAddr, VirtAddr, PAGE_SIZE_4K};

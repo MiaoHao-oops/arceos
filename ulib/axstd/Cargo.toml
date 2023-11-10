@@ -30,6 +30,7 @@ irq = ["arceos_api/irq", "axfeat/irq"]
 
 # Memory
 alloc = ["arceos_api/alloc", "axfeat/alloc", "axio/alloc"]
+alloc-early = ["axfeat/alloc-early"]
 alloc-tlsf = ["axfeat/alloc-tlsf"]
 alloc-slab = ["axfeat/alloc-slab"]
 alloc-buddy = ["axfeat/alloc-buddy"]

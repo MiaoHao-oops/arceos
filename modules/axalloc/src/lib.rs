@@ -22,6 +22,7 @@ use core::alloc::Layout;
 use core::ptr::NonNull;
 
 const PAGE_SIZE: usize = 0x1000;
+#[cfg(not(feature = "early"))]
 const MIN_HEAP_SIZE: usize = 0x8000; // 32 K
 
 pub use page::GlobalPage;

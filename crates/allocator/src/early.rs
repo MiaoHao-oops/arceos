@@ -55,7 +55,7 @@ impl<const PAGE_SIZE: usize> PageAllocator for EarlyAllocator<PAGE_SIZE> {
         if !align_pow2.is_power_of_two() {
             return Err(AllocError::InvalidParam);
         }
-        let pages_ptr = self.top - PAGE_SIZE * num_pages;
+        let pages_ptr = self.p_current - PAGE_SIZE * num_pages;
         let pages_ptr = super::align_down(pages_ptr, align_pow2 * PAGE_SIZE);
         if pages_ptr >= self.b_current {
             self.p_current = pages_ptr;

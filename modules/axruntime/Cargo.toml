@@ -18,12 +18,14 @@ tls = ["axhal/tls", "axtask?/tls"]
 alloc = ["axalloc"]
 paging = ["axhal/paging", "lazy_init"]
 
+dtb = ["axdtb"]
 multitask = ["axtask/multitask"]
 fs = ["axdriver", "axfs"]
 net = ["axdriver", "axnet"]
 display = ["axdriver", "axdisplay"]
 
 [dependencies]
+axdtb ={ path = "../axdtb", optional = true }
 axhal = { path = "../axhal" }
 axlog = { path = "../axlog" }
 axconfig = { path = "../axconfig" }

@@ -142,6 +142,9 @@ pub extern "C" fn rust_main(cpu_id: usize, dtb: usize) -> ! {
     #[cfg(feature = "alloc")]
     init_allocator();
 
+    #[cfg(feature = "dtb")]
+    print_dtb_info(dtb);
+
     #[cfg(feature = "paging")]
     {
         info!("Initialize kernel page table...");
@@ -235,6 +238,27 @@ fn init_allocator() {
                 .expect("add heap memory region failed");
         }
     }
+}
+
+#[cfg(feature = "dtb")]
+fn print_dtb_info(dtb: usize) {
+    use axdtb::pares_dtb;
+    // Parse fdt for early memory info
+    let dtb_info = match pares_dtb(dtb.into()) {
+        Ok(info) => info,
+        Err(err) => panic!("Bad dtb {:?}", err),
+    };
+
+    info!("DTB info: ==================================");
+    info!("Memory[{}]:", dtb_info.memory_regions.len());
+    for r in dtb_info.memory_regions {
+        info!("\t{:#x}, size: {:#x}", r.0, r.1);
+    }
+    info!("Virtio_mmio[{}]:", dtb_info.mmio_regions.len());
+    for r in dtb_info.mmio_regions {
+        info!("\t{:#x}, size: {:#x}", r.0, r.1);
+    }
+    info!("============================================");
 }
 
 #[cfg(feature = "paging")]

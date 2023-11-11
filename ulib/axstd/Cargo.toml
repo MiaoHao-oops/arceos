@@ -19,6 +19,9 @@ documentation = "https://rcore-os.github.io/arceos/axstd/index.html"
 [features]
 default = []
 
+# Dtb parser
+dtb = ["axfeat/dtb"]
+
 # Multicore
 smp = ["axfeat/smp", "spinlock/smp"]
 

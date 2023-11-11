@@ -1,0 +1,13 @@
+[package]
+name = "axdtb"
+version = "0.1.0"
+edition = "2021"
+authors = ["Miao Hao <haomiao19@mails.ucas.ac.cn>"]
+description = "ArceOS dtb parser"
+license = "GPL-3.0-or-later OR Apache-2.0"
+
+[features]
+
+[dependencies]
+hermit-dtb = "0.1.1"
+axlog = { path = "../axlog" }

@@ -2,7 +2,7 @@
 //!
 //! Currently supported algorithms:
 //!
-//! - [`FifoScheduler`]: FIFO (First-In-First-Out) scheduler (cooperative).
+//! - [`FifoScheduler`]: FIFO (First-In-First-Out) scheduler (preemptive).
 //! - [`RRScheduler`]: Round-robin scheduler (preemptive).
 //! - [`CFScheduler`]: Completely Fair Scheduler (preemptive).
 

@@ -1,7 +1,7 @@
-use alloc::sync::Arc;
+use alloc::{collections::VecDeque, sync::Arc};
 use core::ops::Deref;
 
-use linked_list::{Adapter, Links, List};
+use linked_list::{Adapter, Links};
 
 use crate::BaseScheduler;
 
@@ -45,24 +45,25 @@ impl<T> Deref for FifoTask<T> {
     }
 }
 
-/// A simple FIFO (First-In-First-Out) cooperative scheduler.
+/// A simple FIFO (First-In-First-Out) preemptive scheduler.
 ///
 /// When a task is added to the scheduler, it's placed at the end of the ready
 /// queue. When picking the next task to run, the head of the ready queue is
 /// taken.
 ///
-/// As it's a cooperative scheduler, it does nothing when the timer tick occurs.
+/// As it's a simple preemptive scheduler, it always allows preempt when timer
+/// tick occurs.
 ///
 /// It internally uses a linked list as the ready queue.
 pub struct FifoScheduler<T> {
-    ready_queue: List<Arc<FifoTask<T>>>,
+    ready_queue: VecDeque<Arc<FifoTask<T>>>,
 }
 
 impl<T> FifoScheduler<T> {
     /// Creates a new empty [`FifoScheduler`].
     pub const fn new() -> Self {
         Self {
-            ready_queue: List::new(),
+            ready_queue: VecDeque::new(),
         }
     }
     /// get the name of scheduler
@@ -81,19 +82,26 @@ impl<T> BaseScheduler for FifoScheduler<T> {
     }
 
     fn remove_task(&mut self, task: &Self::SchedItem) -> Option<Self::SchedItem> {
-        unsafe { self.ready_queue.remove(task) }
+        self.ready_queue
+            .iter()
+            .position(|t| Arc::ptr_eq(t, task))
+            .and_then(|idx| self.ready_queue.remove(idx))
     }
 
     fn pick_next_task(&mut self) -> Option<Self::SchedItem> {
         self.ready_queue.pop_front()
     }
 
-    fn put_prev_task(&mut self, prev: Self::SchedItem, _preempt: bool) {
-        self.ready_queue.push_back(prev);
+    fn put_prev_task(&mut self, prev: Self::SchedItem, preempt: bool) {
+        if preempt {
+            self.ready_queue.push_back(prev);
+        } else {
+            self.ready_queue.push_front(prev);
+        }
     }
 
     fn task_tick(&mut self, _current: &Self::SchedItem) -> bool {
-        false // no reschedule
+        true
     }
 
     fn set_priority(&mut self, _task: &Self::SchedItem, _prio: isize) -> bool {

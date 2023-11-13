@@ -10,7 +10,7 @@ repository = "https://github.com/rcore-os/arceos/tree/main/modules/axtask"
 documentation = "https://rcore-os.github.io/arceos/axtask/index.html"
 
 [features]
-default = []
+default = ["sched_fifo"]
 
 multitask = [
     "dep:axconfig", "dep:percpu", "dep:spinlock", "dep:lazy_init", "dep:memory_addr",
@@ -20,7 +20,7 @@ irq = []
 tls = ["axhal/tls"]
 preempt = ["irq", "percpu?/preempt", "kernel_guard/preempt"]
 
-sched_fifo = ["multitask"]
+sched_fifo = ["multitask", "preempt"]
 sched_rr = ["multitask", "preempt"]
 sched_cfs = ["multitask", "preempt"]
 

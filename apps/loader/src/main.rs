@@ -9,20 +9,36 @@ use axstd::println;
 const PLASH_START: usize = 0x22000000;
 
 struct ImgHeader {
-    size: usize,
+    app_num: usize,
+}
+
+struct AppHeader {
+    app_size: usize,
 }
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
-    let apps_start = (PLASH_START + size_of::<ImgHeader>()) as *const u8;
+    let img_header_size = size_of::<ImgHeader>();
+    let app_header_size = size_of::<AppHeader>();
     let img_header: &ImgHeader = unsafe { &*(PLASH_START as *const ImgHeader) };
-    let apps_size = img_header.size; // Dangerous!!! We need to get accurate size of apps.
+    let app_num = img_header.app_num;
+    let mut apps_start = PLASH_START + img_header_size + app_num * app_header_size;
 
     println!("Load payload ...");
 
-    println!("app size: {}", apps_size);
-    let code = unsafe { core::slice::from_raw_parts(apps_start, apps_size) };
-    println!("content: {:?}: ", code);
+    for i in 0..app_num {
+        let app_header: &AppHeader = unsafe {
+            &*((PLASH_START + img_header_size + i * app_header_size) as *const AppHeader)
+        };
+        let app_size = app_header.app_size;
+        
+        println!("app[{}] size: {}", i, app_size);
+        let code = unsafe { 
+            core::slice::from_raw_parts(apps_start as *const u8, app_size) 
+        };
+        println!("content: {:?}", code);
+        apps_start += app_size;
+    }
 
     println!("Load payload ok!");
 }

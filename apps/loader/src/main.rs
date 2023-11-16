@@ -1,6 +1,6 @@
+#![feature(asm_const)]
 #![cfg_attr(feature = "axstd", no_std)]
 #![cfg_attr(feature = "axstd", no_main)]
-#![feature(asm_const)]
 
 use core::mem::size_of;
 
@@ -16,6 +16,22 @@ struct ImgHeader {
 
 struct AppHeader {
     app_size: usize,
+}
+
+const SYS_HELLO: usize = 1;
+const SYS_PUTCHAR: usize = 2;
+static mut ABI_TABLE: [usize; 16] = [0; 16];
+
+fn register_abi(num: usize, handle: usize) {
+    unsafe { ABI_TABLE[num] = handle; }
+}
+
+fn abi_hello() {
+    println!("[ABI:Hello] Hello, Apps!");
+}
+
+fn abi_putchar(c: char) {
+    println!("[ABI:Print] {c}");
 }
 
 #[cfg_attr(feature = "axstd", no_mangle)]
@@ -63,4 +79,28 @@ fn main() {
     }
 
     println!("Load payload ok!");
+
+    register_abi(SYS_HELLO, abi_hello as usize);
+    register_abi(SYS_PUTCHAR, abi_putchar as usize);
+
+    println!("Execute app ...");
+
+    let arg0: u8 = b'A';
+    // execute app
+    unsafe { core::arch::asm!("
+        li      t0, {abi_num}
+        slli    t0, t0, 3
+        la      t1, {abi_table}
+        add     t1, t1, t0
+        ld      t1, (t1)
+        jalr    t1
+        li      t2, {run_start}
+        jalr    t2
+        j       .",
+        run_start = const RUN_START,
+        abi_table = sym ABI_TABLE,
+        //abi_num = const SYS_HELLO,
+        abi_num = const SYS_PUTCHAR,
+        in("a0") arg0,
+    )}
 }

@@ -5,7 +5,7 @@
 use core::mem::size_of;
 
 #[cfg(feature = "axstd")]
-use axstd::println;
+use axstd::{println, process::exit};
 
 const PLASH_START: usize = 0x22000000;
 const RUN_START: usize = 0xffff_ffc0_8010_0000;
@@ -20,6 +20,7 @@ struct AppHeader {
 
 const SYS_HELLO: usize = 1;
 const SYS_PUTCHAR: usize = 2;
+const SYS_TERMINATE: usize = 3;
 static mut ABI_TABLE: [usize; 16] = [0; 16];
 
 fn register_abi(num: usize, handle: usize) {
@@ -34,6 +35,11 @@ fn abi_putchar(c: char) {
     println!("[ABI:Print] {c}");
 }
 
+fn abi_terminate(exit_code: i32) {
+    println!("[ABI:Terminate] Loader exits with code {}", exit_code);
+    exit(exit_code);
+}
+
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
     let img_header_size = size_of::<ImgHeader>();
@@ -41,6 +47,25 @@ fn main() {
     let img_header: &ImgHeader = unsafe { &*(PLASH_START as *const ImgHeader) };
     let app_num = img_header.app_num;
     let mut load_start = PLASH_START + img_header_size + app_num * app_header_size;
+
+    register_abi(SYS_HELLO, abi_hello as usize);
+    register_abi(SYS_PUTCHAR, abi_putchar as usize);
+    register_abi(SYS_TERMINATE, abi_terminate as usize);
+
+    let arg0: i32 = 0;
+    // execute app
+    unsafe { core::arch::asm!("
+        li      t0, {abi_num}
+        slli    t0, t0, 3
+        la      t1, {abi_table}
+        add     t1, t1, t0
+        ld      t1, (t1)
+        jalr    t1
+        j       .",
+        abi_table = sym ABI_TABLE,
+        abi_num = const SYS_TERMINATE,
+        in("a0") arg0,
+    )}
 
     println!("Load payload ...");
 
@@ -77,30 +102,4 @@ fn main() {
 
         load_start += load_size;
     }
-
-    println!("Load payload ok!");
-
-    register_abi(SYS_HELLO, abi_hello as usize);
-    register_abi(SYS_PUTCHAR, abi_putchar as usize);
-
-    println!("Execute app ...");
-
-    let arg0: u8 = b'A';
-    // execute app
-    unsafe { core::arch::asm!("
-        li      t0, {abi_num}
-        slli    t0, t0, 3
-        la      t1, {abi_table}
-        add     t1, t1, t0
-        ld      t1, (t1)
-        jalr    t1
-        li      t2, {run_start}
-        jalr    t2
-        j       .",
-        run_start = const RUN_START,
-        abi_table = sym ABI_TABLE,
-        //abi_num = const SYS_HELLO,
-        abi_num = const SYS_PUTCHAR,
-        in("a0") arg0,
-    )}
 }

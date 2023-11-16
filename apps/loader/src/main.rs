@@ -20,11 +20,6 @@ struct AppHeader {
 const SYS_HELLO: usize = 1;
 const SYS_PUTCHAR: usize = 2;
 const SYS_TERMINATE: usize = 3;
-// static mut ABI_TABLE: [usize; 16] = [0; 16];
-
-// fn register_abi(num: usize, handle: usize) {
-//     unsafe { ABI_TABLE[num] = handle; }
-// }
 
 fn abi_hello() {
     println!("[ABI:Hello] Hello, Apps!");
@@ -96,6 +91,7 @@ fn main() {
 
     println!("Load payload ...");
 
+    // FIXME: now apps uses the SAME page table 
     for i in 0..app_num {
         let app_header: &AppHeader = unsafe {
             &*((PLASH_START + img_header_size + i * app_header_size) as *const AppHeader)
@@ -121,7 +117,7 @@ fn main() {
             run_start = const RUN_START,
             abi_entry = sym abi_entry,
         )}
-
+        run_code.fill(0);
         load_start += load_size;
     }
 }

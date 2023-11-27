@@ -2,6 +2,7 @@
 
 include scripts/make/cargo.mk
 include scripts/make/features.mk
+include scripts/make/build_c.mk
 
 ifeq ($(APP_TYPE), c)
   include scripts/make/build_c.mk
@@ -31,11 +32,12 @@ else ifeq ($(filter $(MAKECMDGOALS),clippy unittest unittest_no_fail_fast),) # n
   endif
 endif
 
-_cargo_build:
+_cargo_build: $(c_lib)
 	@printf "    $(GREEN_C)Building$(END_C) App: $(APP_NAME), Arch: $(ARCH), Platform: $(PLATFORM_NAME), App type: $(APP_TYPE)\n"
 ifeq ($(APP_TYPE), rust)
 	$(call cargo_build,--manifest-path $(APP)/Cargo.toml,$(AX_FEAT) $(LIB_FEAT) $(APP_FEAT))
-	@cp $(rust_elf) $(OUT_ELF)
+	$(call run_cmd,$(LD),$(LDFLAGS) $< target/riscv64gc-unknown-none-elf/release/libarceos_loader.a -o $(OUT_ELF))
+# @cp $(rust_elf) $(OUT_ELF)
 else ifeq ($(APP_TYPE), c)
 	$(call cargo_build,-p axlibc,$(AX_FEAT) $(LIB_FEAT))
 endif

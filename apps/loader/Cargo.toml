@@ -10,8 +10,9 @@ crate-type = ["staticlib"]
 
 [dependencies]
 axlibc ={ path = "../../ulib/axlibc" }
-axstd = { path = "../../ulib/axstd", optional = true }
+axstd = { path = "../../ulib/axstd", features = ["alloc"], optional = true }
 axconfig = { path = "../../modules/axconfig" }
+elf = { path = "../../../elf" }
 
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]
 riscv = "0.10"

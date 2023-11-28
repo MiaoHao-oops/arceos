@@ -3,10 +3,17 @@
 #![cfg_attr(feature = "axstd", no_main)]
 
 extern crate axlibc;
+extern crate alloc;
 use core::mem::size_of;
 
 #[cfg(feature = "axstd")]
 use axstd::println;
+use elf::{
+    Elf64Ehdr,
+    Elf64Rela,
+    Elf64Sym,
+    sym::*,
+};
 
 const PLASH_START: usize = 0x2200_0000;
 
@@ -87,7 +94,7 @@ fn libc_start_main(main: usize) {
     }
 }
 
-fn load_elf(app_num: usize, load_start: &mut usize) {
+fn load_elf(app_num: usize, load_start: usize) -> usize {
     const LOAD0_OFF: usize = 0x0;
     const LOAD0_PADDR: usize = 0x80100000;
     const LOAD0_FSIZE: usize = 0x76c;
@@ -96,6 +103,7 @@ fn load_elf(app_num: usize, load_start: &mut usize) {
     const LOAD1_PADDR: usize = 0x80101df8;
     const LOAD1_FSIZE: usize = 0x260;
     const LOAD1_MSIZE: usize = 0x268;
+    const DYN_LINK_POFFSET: usize = 0x8010_0000;
 
     const ENTRY: usize = 0x600;
 
@@ -103,11 +111,17 @@ fn load_elf(app_num: usize, load_start: &mut usize) {
         &*((PLASH_START + IMG_HEADER_SIZE + app_num * APP_HEADER_SIZE) as *const AppHeader)
     };
     let load_size = app_header.app_size;
-    println!("hello app ELF size: {} bytes", app_header.app_size);
-    println!("load_start: {:x}", *load_start);
+    println!("hello app ELF size: {} bytes", load_size);
+    println!("load_start: {:x}", load_start);
 
+    // Grab ELF header
+    let ehdr = unsafe {
+        &*(load_start as *const Elf64Ehdr)
+    };
+
+    // TODO: read load segments from ELF
     let load0_bin = unsafe {
-        core::slice::from_raw_parts((*load_start + LOAD0_OFF) as *const u8, LOAD0_FSIZE)
+        core::slice::from_raw_parts((load_start + LOAD0_OFF) as *const u8, LOAD0_FSIZE)
     };
     let load0_dest = unsafe {
         core::slice::from_raw_parts_mut(LOAD0_PADDR as *mut u8, LOAD0_MSIZE)
@@ -116,7 +130,7 @@ fn load_elf(app_num: usize, load_start: &mut usize) {
     load0_dest.copy_from_slice(load0_bin);
 
     let load1_bin = unsafe {
-        core::slice::from_raw_parts((*load_start + LOAD1_OFF) as *const u8, LOAD1_FSIZE)
+        core::slice::from_raw_parts((load_start + LOAD1_OFF) as *const u8, LOAD1_FSIZE)
     };
     let load1_dest = unsafe {
         core::slice::from_raw_parts_mut(LOAD1_PADDR as *mut u8, LOAD1_MSIZE)
@@ -127,24 +141,43 @@ fn load_elf(app_num: usize, load_start: &mut usize) {
     };
     load1_dest.copy_from_slice(load1_bin);
 
-    unsafe {
-        core::arch::asm!("
-            li  t0, 0x80102008
-            la  t1, {libc_start_main}
-            sd  t1, 16(t0)
-            la  t1, {putchar}
-            sd  t1, 24(t0)
-            la  t1, {printf}
-            sd  t1, 32(t0)
-            la  t1, 0x6de
-            sd  t1, 56(t0)",
-            libc_start_main = sym libc_start_main,
-            putchar = sym putchar,
-            printf = sym printf,
-        );
+    // execute dynamic link
+    let rela_plt_hdr = ehdr.get_she(load_start, ".rela.plt").unwrap();
+    let rela_dyn_hdr = ehdr.get_she(load_start, ".rela.dyn").unwrap();
+    let dynsym_hdr = ehdr.get_she(load_start, ".dynsym").unwrap();
+    let dynstr_hdr = ehdr.get_she(load_start, ".dynstr").unwrap();
+    let dynsyms = dynsym_hdr.get_table::<Elf64Sym>(load_start);
+
+    // linking external symbols
+    let rela_plte = rela_plt_hdr.get_table::<Elf64Rela>(load_start);
+    for rela in rela_plte {
+        let dynsym = &dynsyms[rela.r_sym() as usize];
+        if dynsym.st_bind() == STB_GLOBAL && dynsym.st_type() == STT_FUNC {
+            let func_name = dynstr_hdr.get_name(load_start, dynsym.st_name);
+            let link_vaddr = find_link_vaddr(func_name).unwrap();
+            let mut link_dest = unsafe { 
+                &mut *((rela.r_offset as usize + DYN_LINK_POFFSET) as *mut usize)
+            };
+            *link_dest = link_vaddr;
+            println!("link `{}` to {:x}", func_name, link_vaddr);  
+        }
+    }
+
+    // linking internal symbols
+    let rela_dyne = rela_dyn_hdr.get_table::<Elf64Rela>(load_start);
+    for rela in rela_dyne {
+        let link_vaddr = rela.r_addend as usize;
+        let mut link_dest = unsafe { 
+            &mut *((rela.r_offset as usize + DYN_LINK_POFFSET) as *mut usize)
+        };
+        *link_dest = link_vaddr;
+        println!("ptr storage vaddr: {:x} link vaddr: {:x}", rela.r_offset, link_vaddr);
     }
 
     println!("Execute app ...");
+    // NOTE: APP cannot access MMIO pflash, so use a variable 
+    // in kernel space to pass app entry point
+    let entry = ehdr.e_entry;
     // switch aspace from kernel to app
     let kernel_pg_table = unsafe {
         aspace_save(APP_PT_PGD.as_ptr() as usize)
@@ -152,20 +185,41 @@ fn load_elf(app_num: usize, load_start: &mut usize) {
     unsafe { 
         core::arch::asm!("
             auipc   s0, 0x0
-            addi    s0, s0, 16
-            la      t0, {run_start}
+            addi    s0, s0, 12
             jalr    t0",
-            run_start = const ENTRY,
+            in("t0") entry,
         );
     }
     unsafe {
         aspave_restore(kernel_pg_table);
     }
-    *load_start += load_size;
+    load_size
+}
+
+static mut FUNC_TABLE: [(&str, usize); 3] = [("", 0); 3];
+
+fn init_func_table() {
+    unsafe {
+        FUNC_TABLE[0] = ("__libc_start_main", libc_start_main as usize);
+        FUNC_TABLE[1] = ("putchar", putchar as usize);
+        FUNC_TABLE[2] = ("printf", printf as usize);
+    }
+}
+
+fn find_link_vaddr(func_name: &str) -> Option<usize> {
+    unsafe {
+        for (name, vaddr) in FUNC_TABLE {
+            if func_name == name {
+                return Some(vaddr);
+            }
+        }
+    }
+    None
 }
 
 #[cfg_attr(feature = "axstd", no_mangle)]
 fn main() {
+    init_func_table();
     unsafe { init_app_page_table(); }
 
     let img_header: &ImgHeader = unsafe { &*(PLASH_START as *const ImgHeader) };
@@ -176,6 +230,7 @@ fn main() {
     println!("putchar address: {:x}", putchar as usize);
 
     for i in 0..app_num {
-        load_elf(i, &mut load_start);
+        let load_size = load_elf(i, load_start);
+        load_start += load_size;
     }
 }

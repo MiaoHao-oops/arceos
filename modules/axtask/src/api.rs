@@ -99,6 +99,12 @@ where
     task
 }
 
+pub fn spawn_ptr(ptr: usize, name: String, stack_size: usize, satp: usize) -> AxTaskRef {
+    let task = TaskInner::new_from_ptr(ptr, name, stack_size, satp);
+    RUN_QUEUE.lock().add_task(task.clone());
+    task
+}
+
 /// Spawns a new task with the default parameters.
 ///
 /// The default task name is an empty string. The default task stack size is

@@ -115,9 +115,12 @@ dependencies = [
 name = "arceos-loader"
 version = "0.1.0"
 dependencies = [
+ "axalloc",
  "axconfig",
  "axlibc",
+ "axlog",
  "axstd",
+ "axtask",
  "elf",
  "riscv",
 ]
@@ -489,6 +492,7 @@ dependencies = [
 name = "axsync"
 version = "0.1.0"
 dependencies = [
+ "axlog",
  "axsync",
  "axtask",
  "rand",

@@ -2,13 +2,21 @@
 #![cfg_attr(feature = "axstd", no_std)]
 #![cfg_attr(feature = "axstd", no_main)]
 
+#[macro_use]
+extern crate axlog;
+
 extern crate alloc;
 extern crate axlibc;
 use core::mem::size_of;
-
-#[cfg(feature = "axstd")]
-use axstd::println;
+use core::ffi::{
+    c_int,
+    c_char,
+};
+use alloc::vec::Vec;
 use elf::{phdr::*, sym::*, Elf64Ehdr, Elf64Rela, Elf64Sym};
+
+use axconfig::PHYS_VIRT_OFFSET;
+use axtask::*;
 
 const PLASH_START: usize = 0x2200_0000;
 
@@ -65,33 +73,13 @@ fn init_app_page_table() {
     }
 }
 
-unsafe fn aspace_save(pg_table_paddr: usize) -> usize {
-    use riscv::register::satp;
-    let prev_satp = satp::read().bits();
-    let page_table_root = pg_table_paddr - axconfig::PHYS_VIRT_OFFSET;
-    satp::set(satp::Mode::Sv39, 0, page_table_root >> 12);
-    riscv::asm::sfence_vma_all();
-    prev_satp
+fn libc_start_main(main: fn(argc: c_int, argv: &&c_char)->c_int) {
+    // TODO: pass argc and argv to main
+    axtask::exit(main(0, &&0));
 }
 
-unsafe fn aspave_restore(pg_table_paddr: usize) {
-    use riscv::register::satp;
-    satp::write(pg_table_paddr);
-    riscv::asm::sfence_vma_all();
-}
-
-fn libc_start_main(main: usize) {
-    // TODO: make this function arch-irrelative
-    unsafe {
-        core::arch::asm!("
-            mv  ra, s0
-            jr  a0",
-            in("a0") main,
-        );
-    }
-}
-
-fn load_elf(app_num: usize, load_start: usize) -> usize {
+#[cfg_attr(feature = "axstd", no_mangle)]
+fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     // TODO: translate va2pa through page table
     fn va2pa(va: usize) -> usize {
         const POFFSET: usize = 0x8010_0000;
@@ -102,8 +90,8 @@ fn load_elf(app_num: usize, load_start: usize) -> usize {
         &*((PLASH_START + IMG_HEADER_SIZE + app_num * APP_HEADER_SIZE) as *const AppHeader)
     };
     let load_size = app_header.app_size;
-    println!("hello app ELF size: {} bytes", load_size);
-    println!("load_start: {:x}", load_start);
+    info!("hello app ELF size: {} bytes", load_size);
+    info!("load_start: {:x}", load_start);
 
     // Grab ELF header
     let ehdr = unsafe { &*(load_start as *const Elf64Ehdr) };
@@ -113,7 +101,7 @@ fn load_elf(app_num: usize, load_start: usize) -> usize {
     let pht = ehdr.get_pht(load_start);
     for phe in pht {
         if phe.p_type == PT_LOAD {
-            println!("loading segment to vaddr {:x}, mem size: {:x}", phe.p_vaddr, phe.p_memsz);
+            info!("loading segment to vaddr {:x}, mem size: {:x}", phe.p_vaddr, phe.p_memsz);
             let load_bin = unsafe {
                 core::slice::from_raw_parts(
                     (load_start + phe.p_offset as usize) as *const u8,
@@ -151,11 +139,11 @@ fn load_elf(app_num: usize, load_start: usize) -> usize {
         if dynsym.st_bind() == STB_GLOBAL && dynsym.st_type() == STT_FUNC {
             let func_name = dynstr_hdr.get_name(load_start, dynsym.st_name);
             let link_vaddr = find_link_vaddr(func_name).unwrap();
-            let mut link_dest = unsafe {
+            let link_dest = unsafe {
                 &mut *(va2pa(rela.r_offset as usize) as *mut usize)
             };
             *link_dest = link_vaddr;
-            println!("link `{}` to {:x}", func_name, link_vaddr);
+            info!("link `{}` to {:x}", func_name, link_vaddr);
         }
     }
 
@@ -163,33 +151,32 @@ fn load_elf(app_num: usize, load_start: usize) -> usize {
     let rela_dyne = rela_dyn_hdr.get_table::<Elf64Rela>(load_start);
     for rela in rela_dyne {
         let link_vaddr = rela.r_addend as usize;
-        let mut link_dest = unsafe {
+        let link_dest = unsafe {
             &mut *(va2pa(rela.r_offset as usize) as *mut usize)
         };
         *link_dest = link_vaddr;
-        println!(
+        info!(
             "ptr storage vaddr: {:x}, link vaddr: {:x}",
             rela.r_offset, link_vaddr
         );
     }
 
-    println!("Execute app ...");
+    info!("Execute app ...");
     // NOTE: APP cannot access MMIO pflash, so use a variable
     // in kernel space to pass app entry point
     let entry = ehdr.e_entry;
-    println!("app entry point: {:x}", entry);
-    // switch aspace from kernel to app
-    unsafe { 
-        let kernel_pg_table = aspace_save(APP_PT_PGD.as_ptr() as usize);
-        core::arch::asm!("
-            auipc   s0, 0x0
-            addi    s0, s0, 12
-            jalr    t0",
-            in("t0") entry,
-        );
-        aspave_restore(kernel_pg_table);
-    }
-    load_size
+    info!("app entry point: {:x}", entry);
+
+    let satp = unsafe {
+        (8 << 60) | (0 << 44) | ((APP_PT_PGD.as_ptr() as usize - PHYS_VIRT_OFFSET)) >> 12
+    };
+    let inner = spawn_ptr(
+        entry as usize,
+        "hello".into(),
+        4096,
+        satp
+    );
+    (load_size, inner)
 }
 
 static mut FUNC_TABLE: [(&str, usize); 3] = [
@@ -226,11 +213,16 @@ fn main() {
     let app_num = img_header.app_num;
     let mut load_start = PLASH_START + IMG_HEADER_SIZE + app_num * APP_HEADER_SIZE;
 
-    println!("Load payload ...");
-    println!("putchar address: {:x}", putchar as usize);
+    info!("Load payload ...");
+    info!("putchar address: {:x}", putchar as usize);
+
+    let mut tasks = Vec::new();
 
     for i in 0..app_num {
-        let load_size = load_elf(i, load_start);
+        let (load_size, inner) = load_elf(i, load_start);
         load_start += load_size;
+        tasks.push(inner);
     }
+
+    tasks.into_iter().for_each(|t| { t.join(); });
 }

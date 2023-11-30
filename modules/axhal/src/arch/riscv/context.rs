@@ -86,6 +86,8 @@ pub struct TaskContext {
     pub s11: usize,
 
     pub tp: usize,
+    pub tmp: usize,
+    pub satp: usize,
     // TODO: FP states
 }
 
@@ -98,9 +100,18 @@ impl TaskContext {
     /// Initializes the context for a new task, with the given entry point and
     /// kernel stack.
     pub fn init(&mut self, entry: usize, kstack_top: VirtAddr, tls_area: VirtAddr) {
+        use riscv::register::satp;
         self.sp = kstack_top.as_usize();
         self.ra = entry;
         self.tp = tls_area.as_usize();
+        self.satp = satp::read().bits();
+    }
+
+    pub fn init_with_satp(&mut self, entry: usize, kstack_top: VirtAddr, tls_area: VirtAddr, satp: usize) {
+        self.sp = kstack_top.as_usize();
+        self.ra = entry;
+        self.tp = tls_area.as_usize();
+        self.satp = satp;
     }
 
     /// Switches to another task.
@@ -139,8 +150,13 @@ unsafe extern "C" fn context_switch(_current_task: &mut TaskContext, _next_task:
         STR     s9, a0, 11
         STR     s10, a0, 12
         STR     s11, a0, 13
+        csrr    t0, satp
+        STR     t0, a0, 16
 
         // restore new context
+        LDR     t0, a1, 16
+        csrw    satp, t0
+        sfence.vma
         LDR     s11, a1, 13
         LDR     s10, a1, 12
         LDR     s9, a1, 11

@@ -146,4 +146,12 @@ ELF 解析加载过程：
 
 ## 11 月 29 日
 
-根据 ELF 头读取 segment 信息，将其中属性为 LOAD 的段加载到内存。
+根据 ELF 头读取 segment 信息，将其中属性为 LOAD 的段加载到内存。此时对 kernel 而言，hello app 不具有单独的进程（或者线程）属性，而是与 loader 为一体。
+
+在 loader 的 Cargo.toml 开启 axstd 的 multitask 属性，可以正常编译，但内核 panic 退出，信息为 `current task is uninitialized`，定位到 `axtask::task::CurrentTask::get()` 函数。显然，在初始化时，已经设置了 `current task`，这里为何报错？
+
+经过进一步阅读源码，发现 `current task` 的指针通过 `axhal::cpu::current_task_ptr()` 获取，而 `axtask/multitask` 开启了 `percpu` 功能，也就是说此时的 `current task` 指针是一个 `percpu` 变量。目前，ArceOS 中通过 `gp` 实现 `percpu`，这与 riscv 的 ABI 是不符的。具体体现为 hello app 一开始就重新加载了 `gp`，把内核里维护 `percpu` 的值冲掉了。
+
+因此，为了保持 ABI，我将 `percpu` 改回了使用 `tp` 维护（前一个修改的 commit 将 `tp` 改为 `gp`）。此时在打开 `axstd/multitask` 后可以正常退出。
+
+## 11 月 30 日

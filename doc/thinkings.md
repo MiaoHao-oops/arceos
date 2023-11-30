@@ -39,83 +39,9 @@
 
     - 如果强制链接的话会出现重复的符号
 
-    ```diff
-    diff --git a/apps/loader/Cargo.toml b/apps/loader/Cargo.toml
-    index ec40139..cbd5a5a 100644
-    --- a/apps/loader/Cargo.toml
-    +++ b/apps/loader/Cargo.toml
-    @@ -5,6 +5,9 @@ edition = "2021"
-    
-    # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-    
-    +[lib]
-    +crate-type = ["staticlib"]
-    +
-    [dependencies]
-    axstd = { path = "../../ulib/axstd", optional = true }
-    axconfig = { path = "../../modules/axconfig" }
-    diff --git a/scripts/make/build.mk b/scripts/make/build.mk
-    index 5c815f5..333fa59 100644
-    --- a/scripts/make/build.mk
-    +++ b/scripts/make/build.mk
-    @@ -2,6 +2,7 @@
-    
-    include scripts/make/cargo.mk
-    include scripts/make/features.mk
-    +include scripts/make/build_c.mk
-    
-    ifeq ($(APP_TYPE), c)
-    include scripts/make/build_c.mk
-    @@ -31,11 +32,13 @@ else ifeq ($(filter $(MAKECMDGOALS),clippy unittest unittest_no_fail_fast),) # n
-    endif
-    endif
-    
-    -_cargo_build:
-    +_cargo_build: $(c_lib)
-        @printf "    $(GREEN_C)Building$(END_C) App: $(APP_NAME), Arch: $(ARCH), Platform: $(PLATFORM_NAME), App type: $(APP_TYPE)\n"
-    ifeq ($(APP_TYPE), rust)
-        $(call cargo_build,--manifest-path $(APP)/Cargo.toml,$(AX_FEAT) $(LIB_FEAT) $(APP_FEAT))
-    -	@cp $(rust_elf) $(OUT_ELF)
-    +	$(call cargo_build,-p axlibc, $(LIB_FEAT))
-    +	$(call run_cmd,$(LD),$(LDFLAGS) $< $(rust_lib) target/riscv64gc-unknown-none-elf/release/libarceos_loader.a -o $(OUT_ELF))
-    +# @cp $(rust_elf) $(OUT_ELF)
-    else ifeq ($(APP_TYPE), c)
-        $(call cargo_build,-p axlibc,$(AX_FEAT) $(LIB_FEAT))
-    endif
-    diff --git a/scripts/make/build_c.mk b/scripts/make/build_c.mk
-    index cb92d16..1774c5a 100644
-    --- a/scripts/make/build_c.mk
-    +++ b/scripts/make/build_c.mk
-    @@ -59,18 +59,18 @@ $(obj_dir)/%.o: $(src_dir)/%.c $(last_cflags)
-    $(c_lib): $(obj_dir) _check_need_rebuild $(ulib_obj)
-        $(call run_cmd,$(AR),rcs $@ $(ulib_obj))
-    
-    -app-objs := main.o
-    +# app-objs := main.o
-    
-    --include $(APP)/axbuild.mk  # override `app-objs`
-    +# -include $(APP)/axbuild.mk  # override `app-objs`
-    
-    -app-objs := $(addprefix $(APP)/,$(app-objs))
-    +# app-objs := $(addprefix $(APP)/,$(app-objs))
-    
-    -$(APP)/%.o: $(APP)/%.c $(ulib_hdr)
-    -	$(call run_cmd,$(CC),$(CFLAGS) $(APP_CFLAGS) -c -o $@ $<)
-    +# $(APP)/%.o: $(APP)/%.c $(ulib_hdr)
-    +# 	$(call run_cmd,$(CC),$(CFLAGS) $(APP_CFLAGS) -c -o $@ $<)
-    
-    -$(OUT_ELF): $(c_lib) $(rust_lib) $(libgcc) $(app-objs)
-    -	@printf "    $(CYAN_C)Linking$(END_C) $(OUT_ELF)\n"
-    -	$(call run_cmd,$(LD),$(LDFLAGS) $^ -o $@)
-    +# $(OUT_ELF): $(c_lib) $(rust_lib) $(libgcc) $(app-objs)
-    +# 	@printf "    $(CYAN_C)Linking$(END_C) $(OUT_ELF)\n"
-    +# 	$(call run_cmd,$(LD),$(LDFLAGS) $^ -o $@)
-    
-    $(APP)/axbuild.mk: ;
-    ```
-    **解决方法**：将 rust_libc 和 app 链接在一起，c_libc 再和 rust 代码链接
-    - [x] rust loader 可以调用 libc 的函数
-    - [ ] ArceOS 需要实现 `mmap()`
+**解决方法**：将 rust_libc 和 app 链接在一起，c_libc 再和 rust 代码链接
+- [x] rust loader 可以调用 libc 的函数
+- [ ] ArceOS 需要实现 `mmap()`
 
 ## 11 月 27 日
 
@@ -155,3 +81,7 @@ ELF 解析加载过程：
 因此，为了保持 ABI，我将 `percpu` 改回了使用 `tp` 维护（前一个修改的 commit 将 `tp` 改为 `gp`）。此时在打开 `axstd/multitask` 后可以正常退出。
 
 ## 11 月 30 日
+
+- [x] 实现 `axtask::spawn_from_ptr()`，专门用于创建从 ELF 加载任务的 TCB
+- [x] 在 riscv 的任务上下文中加入 `satp`，`context_switch()` 时同时切换页表
+- [x] 目前实现了动态分配的页表，但未实现进程退出后页的释放

@@ -14,7 +14,7 @@ ulib_src := $(wildcard $(src_dir)/*.c)
 ulib_hdr := $(wildcard $(inc_dir)/*.h)
 ulib_obj := $(patsubst $(src_dir)/%.c,$(obj_dir)/%.o,$(ulib_src))
 
-CFLAGS += $(addprefix -DAX_CONFIG_,$(shell echo $(lib_feat) | tr 'a-z' 'A-Z' | tr '-' '_'))
+CFLAGS += $(addprefix -DAX_CONFIG_,$(shell echo $(clib_feat) | tr 'a-z' 'A-Z' | tr '-' '_'))
 CFLAGS += -DAX_LOG_$(shell echo $(LOG) | tr 'a-z' 'A-Z')
 
 CFLAGS += -nostdinc -fno-builtin -ffreestanding -Wall

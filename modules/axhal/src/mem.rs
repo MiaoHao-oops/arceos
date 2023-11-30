@@ -108,6 +108,12 @@ fn kernel_image_regions() -> impl Iterator<Item = MemRegion> {
             flags: MemRegionFlags::RESERVED | MemRegionFlags::READ | MemRegionFlags::WRITE,
             name: ".bss",
         },
+        MemRegion {
+            paddr: 0x2000_0000.into(),
+            size: 0x1000_0000,
+            flags: MemRegionFlags::RESERVED | MemRegionFlags::READ | MemRegionFlags::WRITE,
+            name: "pflash",
+        },
     ]
     .into_iter()
 }

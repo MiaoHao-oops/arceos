@@ -37,7 +37,6 @@ _cargo_build: $(c_lib)
 ifeq ($(APP_TYPE), rust)
 	$(call cargo_build,--manifest-path $(APP)/Cargo.toml,$(AX_FEAT) $(LIB_FEAT) $(APP_FEAT))
 	$(call run_cmd,$(LD),$(LDFLAGS) $< target/riscv64gc-unknown-none-elf/release/libarceos_loader.a -o $(OUT_ELF))
-# @cp $(rust_elf) $(OUT_ELF)
 else ifeq ($(APP_TYPE), c)
 	$(call cargo_build,-p axlibc,$(AX_FEAT) $(LIB_FEAT))
 endif

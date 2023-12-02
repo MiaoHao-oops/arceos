@@ -13,10 +13,12 @@ use core::ffi::{
     c_char,
 };
 use alloc::vec::Vec;
+use axhal::mem::MemRegionFlags;
 use elf::{phdr::*, sym::*, Elf64Ehdr, Elf64Rela, Elf64Sym};
 
 use axalloc::global_allocator;
 use axconfig::PHYS_VIRT_OFFSET;
+use axhal::paging::{PageTable, MappingFlags};
 use axstd::println;
 use axtask::*;
 
@@ -37,84 +39,20 @@ const APP_HEADER_SIZE: usize = size_of::<AppHeader>();
 // App address space
 //
 
-// TODO: drop all pages when task exit
-fn init_app_page_table() -> usize {
-    let ga = global_allocator();
-    let pgd_kva = ga.alloc_pages(1, 4096).unwrap();
-    let pgd = unsafe {
-        core::slice::from_raw_parts_mut(pgd_kva as *mut u64, 512)
-    };
+fn init_app_page_table() -> PageTable {
+    let mut page_table = PageTable::try_new().unwrap();
     // 0xffff_ffc0_8000_0000..0xffff_ffc0_c000_0000, VRWX_GAD, 1G block
-    pgd[0x102] = (0x80000 << 10) | 0xef;
+    page_table.map_region(
+        0xffff_ffc0_8000_0000.into(),
+        0x8000_0000.into(),
+        0x4000_0000,
+        MappingFlags::READ | MappingFlags::WRITE | MappingFlags::EXECUTE,
+        true
+    );
 
-    pgd_kva
-}
+    debug!("root paddr: {:x}", page_table.root_paddr());
 
-fn fill_pte(pgd_kva: usize, va: usize, pa: usize, prot: u64) {
-    let ga = global_allocator();
-    let vpn = va >> 12;
-    let ppn = (pa >> 12) as u64;
-    let pgd_idx = (vpn >> 18) & 0x1ff;
-    let pmd_idx = (vpn >> 9) & 0x1ff;
-    let ptd_idx = (vpn >> 0) & 0x1ff;
-
-    let pgd = unsafe {
-        core::slice::from_raw_parts_mut(pgd_kva as *mut u64, 512)
-    };
-    let mut pmd_kva = 0;
-    if pgd[pgd_idx] == 0 {
-        pmd_kva = ga.alloc_pages(1, 4096).unwrap();
-        let pmd_pa = pmd_kva - PHYS_VIRT_OFFSET;
-        pgd[pgd_idx] = ((pmd_pa as u64 >> 12) << 10) | 0x01;
-    } else {
-        let pmd_pa = (pgd[pgd_idx] >> 10) << 12;
-        pmd_kva = pmd_pa as usize + PHYS_VIRT_OFFSET;
-    }
-
-    let pmd = unsafe {
-        core::slice::from_raw_parts_mut(pmd_kva as *mut u64, 512)
-    };
-    let mut ptd_kva = 0;
-    if pmd[pmd_idx] == 0 {
-        ptd_kva = ga.alloc_pages(1, 4096).unwrap();
-        let ptd_pa = ptd_kva - PHYS_VIRT_OFFSET;
-        pmd[pmd_idx] = ((ptd_pa as u64 >> 12) << 10) | 0x01;
-    } else {
-        let ptd_pa = (pmd[pmd_idx] >> 10) << 12;
-        ptd_kva = ptd_pa as usize + PHYS_VIRT_OFFSET;
-    }
-
-    let ptd = unsafe {
-        core::slice::from_raw_parts_mut(ptd_kva as *mut u64, 512)
-    };
-    ptd[ptd_idx] = (ppn << 10) | prot;
-}
-
-fn uva2kva(pgd_kva: usize, va: usize) -> usize {
-    let vpn = va >> 12;
-    let pgd_idx = (vpn >> 18) & 0x1ff;
-    let pmd_idx = (vpn >> 9) & 0x1ff;
-    let ptd_idx = (vpn >> 0) & 0x1ff;
-
-    let pgd = unsafe {
-        core::slice::from_raw_parts_mut(pgd_kva as *mut u64, 512)
-    };
-    let pmd_pa = (pgd[pgd_idx] >> 10) << 12;
-    let pmd_kva = pmd_pa as usize + PHYS_VIRT_OFFSET;
-
-    let pmd = unsafe {
-        core::slice::from_raw_parts_mut(pmd_kva as *mut u64, 512)
-    };
-    let ptd_pa = (pmd[pmd_idx] >> 10) << 12;
-    let ptd_kva = ptd_pa as usize + PHYS_VIRT_OFFSET;
-
-    let ptd = unsafe {
-        core::slice::from_raw_parts_mut(ptd_kva as *mut u64, 512)
-    };
-    let voff = va & 0xfff;
-    let ppn = ptd[ptd_idx] as usize >> 10;
-    let pa = (ppn << 12) + voff;
-    pa + PHYS_VIRT_OFFSET
+    page_table
 }
 
 fn libc_start_main(main: fn(argc: c_int, argv: &&c_char)->c_int) {
@@ -131,7 +69,7 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     let load_size = app_header.app_size;
     info!("hello app ELF size: {} bytes", load_size);
 
-    let pgd_kva = init_app_page_table();
+    let mut page_table = init_app_page_table();
 
     // Grab ELF header
     let ehdr = unsafe { &*(load_start as *const Elf64Ehdr) };
@@ -150,12 +88,21 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
             let num_pages = (end_aligned_va - begin_aligned_va) / 4096;
             let pages_kva = global_allocator().alloc_pages(num_pages, 4096).unwrap();
  
-            for i in 0..num_pages {
-                let va = begin_aligned_va + i * 4096;
-                let pa = pages_kva + i * 4096 - PHYS_VIRT_OFFSET;
-                info!("mapping va: {:x} to pa: {:x}", va, pa);
-                fill_pte(pgd_kva, va, pa, 0xef);
-            }
+            let flags = MappingFlags::from_bits(
+                ((phe.p_flags & PF_X) << 2 |
+                (phe.p_flags & PF_W) |
+                (phe.p_flags & PF_R) >> 2) as usize
+            ).unwrap();
+            let va = begin_aligned_va;
+            let pa = pages_kva - PHYS_VIRT_OFFSET;
+            info!("mapping va: {:x} to pa: {:x}", va, pa);
+            page_table.map_region(
+                va.into(),
+                pa.into(),
+                4096 * num_pages,
+                flags,
+                false
+            );
 
             let clearer = unsafe {
                 core::slice::from_raw_parts_mut(
@@ -194,8 +141,11 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
         if dynsym.st_bind() == STB_GLOBAL && dynsym.st_type() == STT_FUNC {
             let func_name = dynstr_hdr.get_name(load_start, dynsym.st_name);
             if let Some(link_vaddr) = find_link_vaddr(func_name) {
+                let (pa, _, _) = page_table.query((rela.r_offset as usize).into()).unwrap();
+                let pa: usize = pa.into();
+                let kva = pa + PHYS_VIRT_OFFSET;
                 let link_dest = unsafe {
-                    &mut *(uva2kva(pgd_kva, rela.r_offset as usize) as *mut usize)
+                    &mut *(kva as *mut usize)
                 };
                 *link_dest = link_vaddr;
                 info!("link `{}` to {:x}", func_name, link_vaddr);
@@ -209,8 +159,11 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     let rela_dyne = rela_dyn_hdr.get_table::<Elf64Rela>(load_start);
     for rela in rela_dyne {
         let link_vaddr = rela.r_addend as usize;
+        let (pa, _, _) = page_table.query((rela.r_offset as usize).into()).unwrap();
+        let pa: usize = pa.into();
+        let kva = pa + PHYS_VIRT_OFFSET;
         let link_dest = unsafe {
-            &mut *(uva2kva(pgd_kva, rela.r_offset as usize) as *mut usize)
+            &mut *(kva as *mut usize)
         };
         *link_dest = link_vaddr;
         info!(
@@ -220,21 +173,24 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     }
 
     info!("Execute app ...");
-    // NOTE: APP cannot access MMIO pflash, so use a variable
-    // in kernel space to pass app entry point
-    let entry = ehdr.e_entry;
-    info!("app entry point: {:x}", entry);
+    info!("app entry point: {:x}", ehdr.e_entry);
 
-    let satp = (8 << 60) | (0 << 44) | ((pgd_kva - PHYS_VIRT_OFFSET)) >> 12;
+    let page_table_pa: usize = page_table.root_paddr().into();
+    info!("set page table, pa: {:x}", page_table_pa);
+    let satp = (8 << 60) | (0 << 44) | (page_table_pa >> 12);
     let inner = spawn_ptr(
-        entry as usize,
+        ehdr.e_entry as usize,
         "hello".into(),
         4096,
-        satp
+        satp,
+        page_table
     );
     (load_size, inner)
 }
 
+///
+/// dynamic link function table
+/// 
 
 extern "C" {
     fn putchar();

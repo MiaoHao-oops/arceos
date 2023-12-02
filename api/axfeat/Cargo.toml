@@ -26,7 +26,7 @@ alloc = ["axalloc", "axruntime/alloc"]
 alloc-tlsf = ["axalloc/tlsf"]
 alloc-slab = ["axalloc/slab"]
 alloc-buddy = ["axalloc/buddy"]
-paging = ["alloc", "axhal/paging", "axruntime/paging"]
+paging = ["alloc", "axhal/paging", "axruntime/paging", "axtask/paging"]
 tls = ["alloc", "axhal/tls", "axruntime/tls", "axtask?/tls"]
 
 # Multi-threading and scheduler

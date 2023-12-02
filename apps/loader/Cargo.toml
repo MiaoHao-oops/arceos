@@ -9,12 +9,13 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-axlibc ={ path = "../../ulib/axlibc", features = ["alloc", "multitask"]}
-axtask ={ path = "../../modules/axtask" }
-axstd = { path = "../../ulib/axstd", features = ["alloc", "multitask", "paging", "irq", "sched_rr"], optional = true }
-axconfig = { path = "../../modules/axconfig" }
-axlog = { path = "../../modules/axlog" }
 axalloc ={ path = "../../modules/axalloc"}
+axconfig = { path = "../../modules/axconfig" }
+axlibc ={ path = "../../ulib/axlibc", features = ["alloc", "multitask"]}
+axhal ={ path = "../../modules/axhal" }
+axlog = { path = "../../modules/axlog" }
+axstd = { path = "../../ulib/axstd", features = ["alloc", "multitask", "paging", "irq", "sched_rr"], optional = true }
+axtask ={ path = "../../modules/axtask" }
 elf = { path = "../../../elf" }
 
 [target.'cfg(any(target_arch = "riscv32", target_arch = "riscv64"))'.dependencies]

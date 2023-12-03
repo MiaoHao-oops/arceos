@@ -12,14 +12,15 @@ use core::ffi::{
     c_int,
     c_char,
 };
-use alloc::vec::Vec;
-use axhal::mem::MemRegionFlags;
+use alloc::{
+    vec::Vec,
+    string::ToString,
+};
 use elf::{phdr::*, sym::*, Elf64Ehdr, Elf64Rela, Elf64Sym};
 
 use axalloc::global_allocator;
 use axconfig::PHYS_VIRT_OFFSET;
 use axhal::paging::{PageTable, MappingFlags};
-use axstd::println;
 use axtask::*;
 
 const PLASH_START: usize = 0x2200_0000 + PHYS_VIRT_OFFSET;
@@ -42,7 +43,7 @@ const APP_HEADER_SIZE: usize = size_of::<AppHeader>();
 fn init_app_page_table() -> PageTable {
     let mut page_table = PageTable::try_new().unwrap();
     // 0xffff_ffc0_8000_0000..0xffff_ffc0_c000_0000, VRWX_GAD, 1G block
-    page_table.map_region(
+    let _ = page_table.map_region(
         0xffff_ffc0_8000_0000.into(),
         0x8000_0000.into(),
         0x4000_0000,
@@ -96,7 +97,7 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
             let va = begin_aligned_va;
             let pa = pages_kva - PHYS_VIRT_OFFSET;
             info!("mapping va: {:x} to pa: {:x}", va, pa);
-            page_table.map_region(
+            let _ = page_table.map_region(
                 va.into(),
                 pa.into(),
                 4096 * num_pages,
@@ -180,17 +181,13 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     let satp = (8 << 60) | (0 << 44) | (page_table_pa >> 12);
     let inner = spawn_ptr(
         ehdr.e_entry as usize,
-        "hello".into(),
+        app_num.to_string(),
         4096,
         satp,
         page_table
     );
     (load_size, inner)
 }
-
-///
-/// dynamic link function table
-/// 
 
 extern "C" {
     fn putchar();
@@ -231,6 +228,10 @@ extern "C" {
     // fn inet_ntop();
     // fn getaddrinfo();
 }
+
+///
+/// dynamic link function table
+/// 
 
 static mut FUNC_TABLE: [(&str, usize); 17] = [
     ("__libc_start_main", 0),

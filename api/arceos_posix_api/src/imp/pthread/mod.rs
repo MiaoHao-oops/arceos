@@ -72,6 +72,7 @@ impl Pthread {
 
     fn current_ptr() -> *mut Pthread {
         let tid = axtask::current().id().as_u64();
+        debug!("get tid {}", tid);
         match TID_TO_PTHREAD.read().get(&tid) {
             None => core::ptr::null_mut(),
             Some(ptr) => ptr.0 as *mut Pthread,
@@ -105,7 +106,22 @@ impl Pthread {
 
 /// Returns the `pthread` struct of current thread.
 pub fn sys_pthread_self() -> ctypes::pthread_t {
-    Pthread::current().expect("fail to get current thread") as *const Pthread as _
+    match Pthread::current() {
+        Some(ptr) => ptr as *const Pthread as _,
+        None => {
+            let main_task = axtask::current();
+            let main_tid = main_task.id().as_u64();
+            let main_thread = Pthread {
+                inner: main_task.as_task_ref().clone(),
+                retval: Arc::new(Packet {
+                    result: UnsafeCell::new(core::ptr::null_mut()),
+                }),
+            };
+            let ptr = Box::into_raw(Box::new(main_thread)) as *mut c_void;
+            TID_TO_PTHREAD.write().insert(main_tid, ForceSendSync(ptr));
+            ptr as *const Pthread as _
+        },
+    }
 }
 
 /// Create a new thread with the given entry point and argument.

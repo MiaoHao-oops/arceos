@@ -33,6 +33,8 @@
 2. ELF 解析
 3. 动态链接
 
+## 日志记录
+
 ## 11 月 23 日
 
 1. ArceOS 的 axstd 和 axlibc 不能同时链接
@@ -43,14 +45,14 @@
 - [x] rust loader 可以调用 libc 的函数
 - [ ] ArceOS 需要实现 `mmap()`
 
-## 11 月 27 日
+### 11 月 27 日
 
 KISS 原则实现了加载时的动态链接：先不实现 mmap 和 ELF 解析，采用硬编码的方式加载 hello
 
 ELF 解析加载过程：
 1. 读取 Program Headers（在 host 上用 readelf），将其中类型为 `LOAD` 的 segment 从文件中加载到内存。
 
-## 11 月 28 日
+### 11 月 28 日
 
 实现了根据 ELF 头获取需要进行动态链接函数的填充地址和填充值，并进行动态链接。
 
@@ -70,7 +72,7 @@ ELF 解析加载过程：
    - `rela.r_addend` 的值即为链接虚地址 `link_vaddr`
    - 将虚地址 `rela.r_offset` 处的 8 字节填写为 `link_vaddr`
 
-## 11 月 29 日
+### 11 月 29 日
 
 根据 ELF 头读取 segment 信息，将其中属性为 LOAD 的段加载到内存。此时对 kernel 而言，hello app 不具有单独的进程（或者线程）属性，而是与 loader 为一体。
 
@@ -80,8 +82,12 @@ ELF 解析加载过程：
 
 因此，为了保持 ABI，我将 `percpu` 改回了使用 `tp` 维护（前一个修改的 commit 将 `tp` 改为 `gp`）。此时在打开 `axstd/multitask` 后可以正常退出。
 
-## 11 月 30 日
+### 11 月 30 日
 
 - [x] 实现 `axtask::spawn_from_ptr()`，专门用于创建从 ELF 加载任务的 TCB
 - [x] 在 riscv 的任务上下文中加入 `satp`，`context_switch()` 时同时切换页表
 - [x] 目前实现了动态分配的页表，但未实现进程退出后页的释放
+
+### 12 月 1 日
+
+通过复用 `axhal::paging::PageTable` 的接口，实现了完整的页表分配、回收功能，并且修改 `TaskInner` 结构体，将页表绑定到上面。这样就实现了类似于 rCore 中的 RAII 风格页表。

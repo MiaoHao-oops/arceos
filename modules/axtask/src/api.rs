@@ -100,8 +100,8 @@ where
     task
 }
 
-pub fn spawn_ptr(ptr: usize, name: String, stack_size: usize, satp: usize, pgtb: PageTable) -> AxTaskRef {
-    let task = TaskInner::new_from_ptr(ptr, name, stack_size, satp, pgtb);
+pub fn spawn_ptr(ptr: usize, name: String, stack_size: usize, pgtb: PageTable) -> AxTaskRef {
+    let task = TaskInner::new_from_ptr(ptr, name, stack_size, pgtb);
     RUN_QUEUE.lock().add_task(task.clone());
     task
 }

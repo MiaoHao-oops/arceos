@@ -1,7 +1,10 @@
 //! Page table manipulation.
+extern crate alloc;
 
 use axalloc::global_allocator;
 use page_table::PagingIf;
+use lazy_init::LazyInit;
+use alloc::sync::Arc;
 
 use crate::mem::{phys_to_virt, virt_to_phys, MemRegionFlags, PhysAddr, VirtAddr, PAGE_SIZE_4K};
 
@@ -64,3 +67,5 @@ cfg_if::cfg_if! {
         pub type PageTable = page_table::aarch64::A64PageTable<PagingIfImpl>;
     }
 }
+
+pub static KERNEL_PAGE_TABLE: LazyInit<Arc<PageTable>> = LazyInit::new();

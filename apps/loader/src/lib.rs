@@ -61,7 +61,6 @@ fn libc_start_main(main: fn(argc: c_int, argv: &&c_char)->c_int) {
     axtask::exit(main(0, &&0));
 }
 
-#[cfg_attr(feature = "axstd", no_mangle)]
 fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
 
     let app_header: &AppHeader = unsafe {
@@ -75,8 +74,7 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     // Grab ELF header
     let ehdr = unsafe { &*(load_start as *const Elf64Ehdr) };
 
-    // Grab program header table, and load PT_LOAD segments into memory
-    // TODO: dynamically page set flags
+    // Grab program header table, and load PT_LOAD segments into virtual memory space
     let pht = ehdr.get_pht(load_start);
     for phe in pht {
         if phe.p_type == PT_LOAD {
@@ -176,14 +174,10 @@ fn load_elf(app_num: usize, load_start: usize) -> (usize, AxTaskRef) {
     info!("Execute app ...");
     info!("app entry point: {:x}", ehdr.e_entry);
 
-    let page_table_pa: usize = page_table.root_paddr().into();
-    info!("set page table, pa: {:x}", page_table_pa);
-    let satp = (8 << 60) | (0 << 44) | (page_table_pa >> 12);
     let inner = spawn_ptr(
         ehdr.e_entry as usize,
         app_num.to_string(),
         4096,
-        satp,
         page_table
     );
     (load_size, inner)

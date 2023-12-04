@@ -231,11 +231,10 @@ fn init_allocator() {
 
 #[cfg(feature = "paging")]
 fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
+    extern crate alloc;
     use axhal::mem::{memory_regions, phys_to_virt};
-    use axhal::paging::PageTable;
-    use lazy_init::LazyInit;
-
-    static KERNEL_PAGE_TABLE: LazyInit<PageTable> = LazyInit::new();
+    use axhal::paging::{PageTable, KERNEL_PAGE_TABLE};
+    use alloc::sync::Arc;
 
     if axhal::cpu::this_cpu_is_bsp() {
         let mut kernel_page_table = PageTable::try_new()?;
@@ -248,7 +247,7 @@ fn remap_kernel_memory() -> Result<(), axhal::paging::PagingError> {
                 true,
             )?;
         }
-        KERNEL_PAGE_TABLE.init_by(kernel_page_table);
+        KERNEL_PAGE_TABLE.init_by(Arc::new(kernel_page_table));
     }
 
     unsafe { axhal::arch::write_page_table_root(KERNEL_PAGE_TABLE.root_paddr()) };

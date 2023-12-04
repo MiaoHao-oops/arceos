@@ -185,6 +185,7 @@ impl AxRunQueue {
             assert!(Arc::strong_count(prev_task.as_task_ref()) > 1);
             assert!(Arc::strong_count(&next_task) >= 1);
 
+            axhal::arch::write_page_table_root(next_task.inner().pgtb_paddr());
             CurrentTask::set_current(prev_task, next_task);
             (*prev_ctx_ptr).switch_to(&*next_ctx_ptr);
         }

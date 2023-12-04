@@ -11,8 +11,11 @@ use axhal::tls::TlsArea;
 
 use axhal::arch::TaskContext;
 #[cfg(feature = "paging")]
-use axhal::paging::PageTable;
-use memory_addr::{align_up_4k, VirtAddr};
+use axhal::paging::{
+    PageTable,
+    KERNEL_PAGE_TABLE,
+};
+use memory_addr::{align_up_4k, VirtAddr, PhysAddr};
 
 use crate::{AxRunQueue, AxTask, AxTaskRef, WaitQueue};
 
@@ -59,7 +62,7 @@ pub struct TaskInner {
     tls: TlsArea,
 
     #[cfg(feature = "paging")]
-    pgtb: Option<UnsafeCell<PageTable>>,
+    pgtb: Arc<PageTable>,
 }
 
 impl TaskId {
@@ -140,7 +143,12 @@ impl TaskInner {
             #[cfg(feature = "tls")]
             tls: TlsArea::alloc(),
             #[cfg(feature = "paging")]
-            pgtb: None,
+            pgtb:  match CurrentTask::try_get() {
+                Some(curr) => {
+                    curr.0.pgtb.clone()
+                },
+                None => KERNEL_PAGE_TABLE.clone(),
+            },
         }
     }
 
@@ -167,7 +175,7 @@ impl TaskInner {
         Arc::new(AxTask::new(t))
     }
 
-    pub(crate) fn new_from_ptr(ptr: usize, name: String, stack_size: usize, satp: usize, pgtb: PageTable) -> AxTaskRef {
+    pub(crate) fn new_from_ptr(ptr: usize, name: String, stack_size: usize, pgtb: PageTable) -> AxTaskRef {
         let mut t = Self::new_common(TaskId::new(), name);
         debug!("new task: {}", t.id_name());
         let kstack = TaskStack::alloc(align_up_4k(stack_size));
@@ -178,12 +186,12 @@ impl TaskInner {
         let tls = VirtAddr::from(0);
 
         // TODO: this line of code is arch-specified
-        t.ctx.get_mut().init_with_satp(ptr as usize, kstack.top(), tls, satp);
+        t.ctx.get_mut().init(ptr as usize, kstack.top(), tls);
         t.kstack = Some(kstack);
         if t.name == "idle" {
             t.is_idle = true;
         }
-        t.pgtb = Some(UnsafeCell::new(pgtb));
+        t.pgtb = Arc::new(pgtb);
         Arc::new(AxTask::new(t))
     }
 
@@ -307,6 +315,11 @@ impl TaskInner {
     #[inline]
     pub(crate) const unsafe fn ctx_mut_ptr(&self) -> *mut TaskContext {
         self.ctx.get()
+    }
+
+    #[cfg(feature = "paging")]
+    pub(crate) fn pgtb_paddr(&self) -> PhysAddr {
+        self.pgtb.root_paddr()
     }
 }
 

@@ -11,46 +11,44 @@
 #   - `LIB_FEAT`: features to be enabled for the user library (crate `axstd`, `axlibc`).
 #   - `APP_FEAT`: features to be enabled for the Rust app.
 
-# ifeq ($(APP_TYPE),c)
-  cax_feat_prefix := axfeat/
+ifneq ($(filter $(APP_TYPE),c mix),)
+  ax_feat_prefix := axfeat/
   clib_feat_prefix := axlibc/
   clib_features := fp_simd alloc multitask fs net fd pipe select epoll
-# else
+endif
+
+ifneq ($(filter $(APP_TYPE),rust mix),)
   # TODO: it's better to use `axfeat/` as `ax_feat_prefix`, but all apps need to have `axfeat` as a dependency
   ax_feat_prefix := axstd/
   lib_feat_prefix := axstd/
   lib_features :=
-# endif
+endif
 
 FEATURES := $(shell echo $(FEATURES) | tr ',' ' ')
 
-# ifeq ($(APP_TYPE), c)
+ifneq ($(filter $(APP_TYPE),c mix),)
   ifneq ($(wildcard $(APP)/features.txt),)    # check features.txt exists
     CFEATURES += $(shell cat $(APP)/features.txt)
   endif
   ifneq ($(filter fs net pipe select epoll,$(FEATURES)),)
     CFEATURES += fd
   endif
-# endif
+endif
 
 override FEATURES := $(strip $(FEATURES))
 
 ax_feat :=
 lib_feat :=
-
-cax_feat :=
 clib_feat :=
 
 ifneq ($(filter $(LOG),off error warn info debug trace),)
   ax_feat += log-level-$(LOG)
-  cax_feat += log-level-$(LOG)
 else
   $(error "LOG" must be one of "off", "error", "warn", "info", "debug", "trace")
 endif
 
 ifeq ($(BUS),pci)
   ax_feat += bus-pci
-  cax_feat += bus-pci
 endif
 
 ifeq ($(shell test $(SMP) -gt 1; echo $$?),0)
@@ -60,12 +58,9 @@ endif
 
 ax_feat += $(filter-out $(lib_features),$(FEATURES))
 lib_feat += $(filter $(lib_features),$(FEATURES))
-
-cax_feat += $(filter-out $(clib_features),$(CFEATURES))
 clib_feat += $(filter $(clib_features),$(CFEATURES))
 
 AX_FEAT := $(strip $(addprefix $(ax_feat_prefix),$(ax_feat)))
 LIB_FEAT := $(strip $(addprefix $(lib_feat_prefix),$(lib_feat)))
-CAX_FEAT := $(strip $(addprefix $(cax_feat_prefix),$(cax_feat)))
 CLIB_FEAT := $(strip $(addprefix $(clib_feat_prefix),$(clib_feat)))
 APP_FEAT := $(strip $(shell echo $(APP_FEATURES) | tr ',' ' '))

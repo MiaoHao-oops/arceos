@@ -59,18 +59,20 @@ $(obj_dir)/%.o: $(src_dir)/%.c $(last_cflags)
 $(c_lib): $(obj_dir) _check_need_rebuild $(ulib_obj)
 	$(call run_cmd,$(AR),rcs $@ $(ulib_obj))
 
-# app-objs := main.o
+ifeq ($(APP_TYPE), c)
+app-objs := main.o
 
-# -include $(APP)/axbuild.mk  # override `app-objs`
+-include $(APP)/axbuild.mk  # override `app-objs`
 
-# app-objs := $(addprefix $(APP)/,$(app-objs))
+app-objs := $(addprefix $(APP)/,$(app-objs))
 
-# $(APP)/%.o: $(APP)/%.c $(ulib_hdr)
-# 	$(call run_cmd,$(CC),$(CFLAGS) $(APP_CFLAGS) -c -o $@ $<)
+$(APP)/%.o: $(APP)/%.c $(ulib_hdr)
+	$(call run_cmd,$(CC),$(CFLAGS) $(APP_CFLAGS) -c -o $@ $<)
 
-# $(OUT_ELF): $(c_lib) $(rust_lib) $(libgcc) $(app-objs)
-# 	@printf "    $(CYAN_C)Linking$(END_C) $(OUT_ELF)\n"
-# 	$(call run_cmd,$(LD),$(LDFLAGS) $^ -o $@)
+$(OUT_ELF): $(c_lib) $(rust_lib) $(libgcc) $(app-objs)
+	@printf "    $(CYAN_C)Linking$(END_C) $(OUT_ELF)\n"
+	$(call run_cmd,$(LD),$(LDFLAGS) $^ -o $@)
+endif
 
 $(APP)/axbuild.mk: ;
 

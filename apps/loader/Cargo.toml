@@ -11,7 +11,7 @@ crate-type = ["staticlib"]
 [dependencies]
 axalloc ={ path = "../../modules/axalloc"}
 axconfig = { path = "../../modules/axconfig" }
-axlibc ={ path = "../../ulib/axlibc", features = ["alloc", "multitask"]}
+axlibc ={ path = "../../ulib/axlibc" }
 axhal ={ path = "../../modules/axhal" }
 axlog = { path = "../../modules/axlog" }
 axstd = { path = "../../ulib/axstd", features = ["alloc", "multitask", "paging", "irq", "sched_rr"], optional = true }

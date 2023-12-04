@@ -2,14 +2,19 @@
 
 include scripts/make/cargo.mk
 include scripts/make/features.mk
-include scripts/make/build_c.mk
 
-ifeq ($(APP_TYPE), c)
+ifneq ($(filter $(APP_TYPE),c mix),)
   include scripts/make/build_c.mk
-else
+endif
+
+ifneq ($(filter $(APP_TYPE),rust mix),)
   rust_package := $(shell cat $(APP)/Cargo.toml | sed -n 's/^name = "\([a-z0-9A-Z_\-]*\)"/\1/p')
   rust_target_dir := $(CURDIR)/target/$(TARGET)/$(MODE)
   rust_elf := $(rust_target_dir)/$(rust_package)
+endif
+
+ifeq ($(APP_TYPE), mix)
+	rust_lib := $(rust_target_dir)/lib$(subst -,_,$(rust_package)).a
 endif
 
 ifneq ($(filter $(MAKECMDGOALS),doc doc_check_missing),)  # run `cargo doc`
@@ -32,13 +37,18 @@ else ifeq ($(filter $(MAKECMDGOALS),clippy unittest unittest_no_fail_fast),) # n
   endif
 endif
 
-_cargo_build: $(c_lib)
+_cargo_build:
 	@printf "    $(GREEN_C)Building$(END_C) App: $(APP_NAME), Arch: $(ARCH), Platform: $(PLATFORM_NAME), App type: $(APP_TYPE)\n"
 ifeq ($(APP_TYPE), rust)
 	$(call cargo_build,--manifest-path $(APP)/Cargo.toml,$(AX_FEAT) $(LIB_FEAT) $(APP_FEAT))
-	$(call run_cmd,$(LD),$(LDFLAGS) $< target/riscv64gc-unknown-none-elf/release/libarceos_loader.a -o $(OUT_ELF))
+	@cp $(rust_elf) $(OUT_ELF)
 else ifeq ($(APP_TYPE), c)
-	$(call cargo_build,-p axlibc,$(AX_FEAT) $(LIB_FEAT))
+	export RUSTFLAGS="--crate-type=staticlib"
+	$(call cargo_rustc,-p axlibc --crate-type staticlib,$(AX_FEAT) $(CLIB_FEAT))
+else
+	make $(c_lib)
+	$(call cargo_rustc,--manifest-path $(APP)/Cargo.toml,$(AX_FEAT) $(LIB_FEAT) $(CLIB_FEAT) $(APP_FEAT))
+	$(call run_cmd,$(LD),$(LDFLAGS) $(c_lib) $(rust_lib) -o $(OUT_ELF))
 endif
 
 $(OUT_DIR):

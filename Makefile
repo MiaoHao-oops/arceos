@@ -59,7 +59,11 @@ ifeq ($(wildcard $(APP)),)
 endif
 
 ifneq ($(wildcard $(APP)/Cargo.toml),)
-  APP_TYPE := rust
+  ifneq ($(wildcard $(APP)/features.txt),)
+    APP_TYPE := mix
+  else
+    APP_TYPE := rust
+  endif
 else
   APP_TYPE := c
 endif

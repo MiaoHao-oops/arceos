@@ -31,6 +31,10 @@ define cargo_build
   $(call run_cmd,cargo build,$(build_args) $(1) --features "$(strip $(2))")
 endef
 
+define cargo_rustc
+	$(call run_cmd,cargo rustc,$(build_args) $(1) --features "$(strip $(2))")
+endef
+
 define cargo_clippy
   $(call run_cmd,cargo clippy,--all-features --workspace --exclude axlog $(1) $(verbose))
   $(call run_cmd,cargo clippy,-p axlog -p percpu -p percpu_macros $(1) $(verbose))
